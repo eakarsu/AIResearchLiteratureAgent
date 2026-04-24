@@ -1,0 +1,12 @@
+const express = require('express'); const cors = require('cors');
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+const app = express(); app.use(cors()); app.use(express.json());
+const pool = require('./models/db');
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/papers', require('./routes/papers'));
+app.use('/api/collections', require('./routes/collections'));
+app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/agents', require('./routes/agents'));
+app.get('/api/stats', async (req, res) => { try { const [p,c,r,u] = await Promise.all([pool.query('SELECT COUNT(*) FROM papers'), pool.query('SELECT COUNT(*) FROM collections'), pool.query('SELECT COUNT(*) FROM reviews'), pool.query("SELECT COUNT(*) FROM papers WHERE status='unread'")]); res.json({ papers: +p.rows[0].count, collections: +c.rows[0].count, reviews: +r.rows[0].count, unread: +u.rows[0].count }); } catch(e) { res.status(500).json({ error: e.message }); } });
+const PORT = process.env.PORT || 3022;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

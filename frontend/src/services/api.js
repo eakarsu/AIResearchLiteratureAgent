@@ -1,0 +1,16 @@
+const API = 'http://localhost:3022/api'; const h = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+export const login = (e, p) => fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: e, password: p }) }).then(r => r.json());
+export const getStats = () => fetch(`${API}/stats`, { headers: h() }).then(r => r.json());
+export const getPapers = (source, status) => fetch(`${API}/papers${source || status ? `?${source ? `source=${source}` : ''}${source && status ? '&' : ''}${status ? `status=${status}` : ''}` : ''}`, { headers: h() }).then(r => r.json());
+export const createPaper = d => fetch(`${API}/papers`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const updatePaper = (id, d) => fetch(`${API}/papers/${id}`, { method: 'PUT', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const deletePaper = id => fetch(`${API}/papers/${id}`, { method: 'DELETE', headers: h() }).then(r => r.json());
+export const getCollections = () => fetch(`${API}/collections`, { headers: h() }).then(r => r.json());
+export const createCollection = d => fetch(`${API}/collections`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const deleteCollection = id => fetch(`${API}/collections/${id}`, { method: 'DELETE', headers: h() }).then(r => r.json());
+export const getReviews = () => fetch(`${API}/reviews`, { headers: h() }).then(r => r.json());
+export const createReview = d => fetch(`${API}/reviews`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const deleteReview = id => fetch(`${API}/reviews/${id}`, { method: 'DELETE', headers: h() }).then(r => r.json());
+export const aiSynthesize = d => fetch(`${API}/agents/synthesize-findings`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const aiGaps = d => fetch(`${API}/agents/identify-gaps`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());
+export const aiReview = d => fetch(`${API}/agents/generate-review`, { method: 'POST', headers: h(), body: JSON.stringify(d) }).then(r => r.json());

@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, name VARCHAR(255), created_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS papers (id SERIAL PRIMARY KEY, title VARCHAR(500) NOT NULL, authors TEXT, abstract TEXT, source VARCHAR(50), year INTEGER, citations INTEGER DEFAULT 0, doi VARCHAR(100), url VARCHAR(500), tags TEXT, status VARCHAR(20) DEFAULT 'unread', relevance_score DECIMAL(3,1), created_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS collections (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, paper_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS paper_collections (paper_id INTEGER REFERENCES papers(id) ON DELETE CASCADE, collection_id INTEGER REFERENCES collections(id) ON DELETE CASCADE, PRIMARY KEY (paper_id, collection_id));
+CREATE TABLE IF NOT EXISTS notes (id SERIAL PRIMARY KEY, paper_id INTEGER REFERENCES papers(id) ON DELETE CASCADE, content TEXT, highlights TEXT, created_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, topic TEXT, status VARCHAR(20) DEFAULT 'draft', papers_included INTEGER DEFAULT 0, content TEXT, gaps_identified TEXT, created_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS research_logs (id SERIAL PRIMARY KEY, paper_id INTEGER REFERENCES papers(id), level VARCHAR(20) DEFAULT 'info', agent VARCHAR(50), message TEXT, created_at TIMESTAMP DEFAULT NOW());
