@@ -1,5 +1,5 @@
 import React from 'react';
-const items = [{key:'dashboard',icon:'📊',label:'Dashboard'},{key:'papers',icon:'📄',label:'Papers'},{key:'collections',icon:'📁',label:'Collections'},{key:'reviews',icon:'📝',label:'Reviews'},{key:'agents',icon:'🤖',label:'AI Agents'}];
+const items = [{key:'dashboard',icon:'📊',label:'Dashboard'},{key:'papers',icon:'📄',label:'Papers'},{key:'collections',icon:'📁',label:'Collections'},{key:'reviews',icon:'📝',label:'Reviews'},{key:'agents',icon:'🤖',label:'AI Agents'},{key:'new-agents',icon:'✨',label:'New Agents'},{key:'custom-views',icon:'📈',label:'Lit Views'}];
 export default function Sidebar({ active, onNavigate }) {
   return (<div style={{ width: 240, background: '#16213e', height: '100vh', padding: '20px 0', position: 'fixed', left: 0, top: 0 }}>
     <div style={{ padding: '0 20px 30px', borderBottom: '1px solid #0f3460' }}><h2 style={{ color: '#e94560', margin: 0, fontSize: 18 }}>📚 Research Agent</h2><p style={{ color: '#888', fontSize: 12, margin: '5px 0 0' }}>AI Literature Review Platform</p></div>
