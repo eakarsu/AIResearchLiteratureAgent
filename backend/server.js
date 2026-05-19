@@ -42,3 +42,12 @@ app.use('/api/gap-no-arxivpubmedgoogle-scholar-api-integration', require('./rout
 app.use('/api/gap-no-quality-scoring-grade-methodology-rigor', require('./routes/gap-no-quality-scoring-grade-methodology-rigor'));
 app.use('/api/gap-no-notifications-for-new-matching-papers', require('./routes/gap-no-notifications-for-new-matching-papers'));
 // === End Batch 07 ===
+
+// Health endpoint
+app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'AIResearchLiteratureAgent', ts: Date.now() }));
+
+// Custom Views (mounted BEFORE 404)
+app.use('/api/custom-views', require('./routes/customViews'));
+
+// 404 fallback (must be last)
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not Found', path: req.originalUrl }));
