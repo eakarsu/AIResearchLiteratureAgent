@@ -4,6 +4,19 @@ import PapersPage from './pages/PapersPage'; import CollectionsPage from './page
 import ReviewsPage from './pages/ReviewsPage'; import AgentsPage from './pages/AgentsPage';
 import NewAgentsPage from './pages/NewAgentsPage';
 import CustomViewsPage from './pages/CustomViewsPage';
+import GapNoArxivpubmedgoogleScholarApiIntegration from './pages/GapNoArxivpubmedgoogleScholarApiIntegration';
+import GapNoBibtexzoteroCitationExport from './pages/GapNoBibtexzoteroCitationExport';
+import GapNoCitationnetworkanalysisGraphInfluence from './pages/GapNoCitationnetworkanalysisGraphInfluence';
+import GapNoGapfinderUnansweredQuestions from './pages/GapNoGapfinderUnansweredQuestions';
+import GapNoHighlightannotationTool from './pages/GapNoHighlightannotationTool';
+import GapNoLiteraturereviewgeneratorMultipaperSynt from './pages/GapNoLiteraturereviewgeneratorMultipaperSynt';
+import GapNoMethodologycomparison from './pages/GapNoMethodologycomparison';
+import GapNoNotificationsForNewMatchingPapers from './pages/GapNoNotificationsForNewMatchingPapers';
+import GapNoPaperrecommender from './pages/GapNoPaperrecommender';
+import GapNoPapersummarizerAbstractKeyFindings from './pages/GapNoPapersummarizerAbstractKeyFindings';
+import GapNoPdfIngestionparsingPipeline from './pages/GapNoPdfIngestionparsingPipeline';
+import GapNoQualityScoringGradeMethodologyRigor from './pages/GapNoQualityScoringGradeMethodologyRigor';
+import GapNoRealtimeCollaborativeEditing from './pages/GapNoRealtimeCollaborativeEditing';
 function App() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('token'));
   const initialPage = (typeof window !== 'undefined' && window.location.pathname === '/custom-views') ? 'custom-views' : 'dashboard';
@@ -24,7 +37,7 @@ function App() {
     }
   };
   if (!loggedIn) return <LoginPage onLogin={() => setLoggedIn(true)} />;
-  const pages = { dashboard: <DashboardPage onNavigate={navigate} />, papers: <PapersPage />, collections: <CollectionsPage />, reviews: <ReviewsPage />, agents: <AgentsPage />, 'new-agents': <NewAgentsPage />, 'custom-views': <CustomViewsPage /> };
+  const pages = { dashboard: <DashboardPage onNavigate={navigate} />, papers: <PapersPage />, collections: <CollectionsPage />, reviews: <ReviewsPage />, agents: <AgentsPage />, 'new-agents': <NewAgentsPage />, 'custom-views': <CustomViewsPage />, 'gap-arxiv': <GapNoArxivpubmedgoogleScholarApiIntegration />, 'gap-bibtex': <GapNoBibtexzoteroCitationExport />, 'gap-citation-network': <GapNoCitationnetworkanalysisGraphInfluence />, 'gap-gapfinder': <GapNoGapfinderUnansweredQuestions />, 'gap-highlight': <GapNoHighlightannotationTool />, 'gap-lit-review': <GapNoLiteraturereviewgeneratorMultipaperSynt />, 'gap-methodology': <GapNoMethodologycomparison />, 'gap-notifications': <GapNoNotificationsForNewMatchingPapers />, 'gap-recommender': <GapNoPaperrecommender />, 'gap-summarizer': <GapNoPapersummarizerAbstractKeyFindings />, 'gap-pdf': <GapNoPdfIngestionparsingPipeline />, 'gap-quality': <GapNoQualityScoringGradeMethodologyRigor />, 'gap-collab': <GapNoRealtimeCollaborativeEditing /> };
   return (<BrowserRouter><div style={{ display: 'flex', minHeight: '100vh', background: '#1a1a2e' }}><Sidebar active={page} onNavigate={navigate} /><div style={{ marginLeft: 240, padding: 30, flex: 1 }}>{pages[page] || pages.dashboard}</div></div></BrowserRouter>);
 }
 export default App;

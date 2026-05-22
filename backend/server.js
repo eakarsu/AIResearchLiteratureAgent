@@ -49,5 +49,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'AIResear
 // Custom Views (mounted BEFORE 404)
 app.use('/api/custom-views', require('./routes/customViews'));
 
+// Apply pass 6: canonical citation graph visualization endpoint (mechanical
+// follow-up over track-citations). Mounted BEFORE 404.
+app.use('/api/ai/citation-graph', require('./routes/ai-citation-graph'));
+
 // 404 fallback (must be last)
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not Found', path: req.originalUrl }));
