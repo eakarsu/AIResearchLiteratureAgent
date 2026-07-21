@@ -2,8 +2,10 @@ const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 async function seed() {
+  if (process.env.ALLOW_DESTRUCTIVE_SEED !== '1') throw new Error('Set ALLOW_DESTRUCTIVE_SEED=1 only for an isolated demo database');
+  if ((process.env.SEED_ADMIN_PASSWORD || '').length < 12) throw new Error('SEED_ADMIN_PASSWORD must contain at least 12 characters');
   const bcrypt = require('bcryptjs');
-  const hash = await bcrypt.hash('admin123', 10);
+  const hash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD, 10);
   await pool.query(`INSERT INTO users (email, password, name) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING`, ['admin@example.com', hash, 'Admin']);
 
   const papers = [

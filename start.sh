@@ -1,12 +1,8 @@
-#!/bin/bash
-cd "$(dirname "$0")"
-echo "📚 Starting AI Research Literature Agent..."
-for port in 3022 3023; do pid=$(lsof -ti:$port 2>/dev/null); [ -n "$pid" ] && kill -9 $pid 2>/dev/null; done
-createdb ai_research_literature_db 2>/dev/null || true
-cd backend && npm install 2>/dev/null; cd ../frontend && npm install 2>/dev/null; cd ..
-psql -d ai_research_literature_db -f backend/models/schema.sql 2>/dev/null
-node backend/seeds/seed.js
-cd backend && npx nodemon server.js &
-cd ../frontend && PORT=3023 npm start &
-echo "✅ Backend: http://localhost:3022 | Frontend: http://localhost:3023"
-wait
+#!/usr/bin/env bash
+set -euo pipefail
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; API_DIR="$PROJECT_DIR/backend"; UI_DIR="$PROJECT_DIR/frontend"; MIGRATION="$API_DIR/migrations/001_governed_workflows.sql"
+value(){ local key="$1" current="${!1:-}"; if [[ -n "$current" ]]; then printf '%s' "$current"; else awk -F= -v key="$key" '$1==key{sub(/^[^=]*=/,"");gsub(/^[\047\"]|[\047\"]$/,"");print;exit}' "$PROJECT_DIR/.env"; fi; }
+check(){ command -v node >/dev/null && command -v npm >/dev/null || { echo 'node and npm are required' >&2; return 1; }; [[ -f "$PROJECT_DIR/.env" ]] || { echo 'Copy .env.example to .env and configure it' >&2; return 1; }; [[ "$(value JWT_SECRET)" =~ ^.{32,}$ ]] || { echo 'JWT_SECRET must contain at least 32 characters' >&2; return 1; }; [[ "$(value GOVERNANCE_TENANT_ID)" =~ ^[A-Za-z0-9._:-]{3,128}$ ]] || { echo 'GOVERNANCE_TENANT_ID is required' >&2; return 1; }; [[ -n "$(value DATABASE_URL)" ]] || { echo 'DATABASE_URL is required' >&2; return 1; }; rg -qi 'changeme|postgres:postgres|secret-key' "$PROJECT_DIR/.env" && { echo 'Replace placeholder credentials in .env' >&2; return 1; }; echo 'Configuration checks passed'; }
+migrate(){ check; [[ "${ALLOW_SCHEMA_MIGRATION:-$(value ALLOW_SCHEMA_MIGRATION)}" == 1 ]] || { echo 'Set ALLOW_SCHEMA_MIGRATION=1 for the explicit migrate command' >&2; return 1; }; command -v psql >/dev/null || { echo 'psql is required for migrations' >&2; return 1; }; psql "$(value DATABASE_URL)" -v ON_ERROR_STOP=1 -f "$MIGRATION"; }
+start_services(){ check; [[ -d "$API_DIR/node_modules" && -d "$UI_DIR/node_modules" ]] || { echo 'Install dependencies explicitly in backend and frontend first' >&2; return 1; }; (cd "$API_DIR" && node server.js)& api_pid=$!; (cd "$UI_DIR" && npm start)& ui_pid=$!; trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT INT TERM; wait "$api_pid" "$ui_pid"; }
+case "${1:-check}" in check) check;; migrate) migrate;; start) start_services;; *) echo 'Usage: ./start.sh {check|migrate|start}' >&2; exit 2;; esac
