@@ -13,7 +13,7 @@ if(process.env.ENABLE_GENERATED_ROUTES==='true'&&process.env.NODE_ENV!=='product
 app.use('/api/notes',require('./routes/notes'));
 app.get('/api/stats',async(req,res)=>{try{const[p,c,r,u]=await Promise.all([pool.query('SELECT COUNT(*) FROM papers'),pool.query('SELECT COUNT(*) FROM collections'),pool.query('SELECT COUNT(*) FROM reviews'),pool.query("SELECT COUNT(*) FROM papers WHERE status='unread'")]);res.json({papers:+p.rows[0].count,collections:+c.rows[0].count,reviews:+r.rows[0].count,unread:+u.rows[0].count});}catch(e){res.status(500).json({error:e.message});}});
 app.use('/api/governed-literature',require('./governance'));
-if(process.env.ENABLE_GENERATED_ROUTES==='true'&&process.env.NODE_ENV!=='production')app.use('/api/ai/literature-review',require('./routes/ai-literature-review'));
+app.use('/api/ai/literature-review',require('./routes/ai-literature-review'));
 
 // Health endpoint
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'AIResearchLiteratureAgent', ts: Date.now() }));

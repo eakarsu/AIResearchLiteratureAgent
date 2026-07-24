@@ -2,16 +2,16 @@
 // Input research question, AI finds papers and synthesizes narrative
 const express = require('express');
 const router = express.Router();
-// models optional — persistence disabled in this v0 scaffold
+const pool = require('../models/db');
 const auth = require('../middleware/auth');
 
-const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
+const MODEL = process.env.OPENROUTER_MODEL;
 // TODO: configure credentials — set process.env.OPENROUTER_API_KEY
 
 async function callLLM(systemPrompt, userPrompt) {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return { success: false, error: 'OPENROUTER_API_KEY not configured' };
-  const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+  const baseUrl = String(process.env.OPENROUTER_BASE_URL || '').replace(/\/$/, '');
+  if (!apiKey || !MODEL || !baseUrl) throw new Error('OpenRouter runtime configuration is required');
   const response = await fetch(baseUrl + '/chat/completions', {
     method: 'POST',
     headers: {
@@ -30,9 +30,11 @@ async function callLLM(systemPrompt, userPrompt) {
       temperature: 0.4
     })
   });
-  if (!response.ok) return { success: false, error: `LLM error ${response.status}` };
+  if (!response.ok) throw new Error(`OpenRouter request failed with HTTP ${response.status}`);
   const data = await response.json();
-  return { success: true, content: data.choices?.[0]?.message?.content || '' };
+  const content = String(data.choices?.[0]?.message?.content || '').trim();
+  if (!content) throw new Error('OpenRouter returned empty content');
+  return { success: true, content };
 }
 
 function parseJsonLoose(text) {
@@ -47,7 +49,10 @@ function parseJsonLoose(text) {
 }
 
 async function persistResult(userId, endpoint, inputData, result) {
-  // no shared pool/models import — persistence skipped
+  await pool.query(
+    'INSERT INTO ai_results(user_id,endpoint,input_data,result) VALUES($1,$2,$3,$4)',
+    [userId || null, endpoint, inputData || {}, result || {}]
+  );
 }
 
 router.use(auth);
