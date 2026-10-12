@@ -3,14 +3,9 @@ const pool = require('../models/db');
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 
-// In-memory storage for filter rules (CRUD-able)
-let filterRules = [
-  { id: 1, type: 'inclusion', field: 'tags', pattern: 'transformer', note: 'Include any transformer-related work' },
-  { id: 2, type: 'inclusion', field: 'year', pattern: '>=2018', note: 'Recent literature only' },
-  { id: 3, type: 'exclusion', field: 'source', pattern: 'preprint', note: 'Exclude unreviewed preprints' },
-  { id: 4, type: 'exclusion', field: 'citations', pattern: '<5', note: 'Skip low-impact citations' },
-];
-let nextRuleId = 5;
+router.use(require('../middleware/auth'));
+router.use(require('../middleware/researchActor'));
+
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -24,30 +19,20 @@ router.use(limiter);
 // 1) VIZ: publications-per-year
 router.get('/publications-per-year', async (req, res) => {
   try {
-    const r = await pool.query("SELECT year, COUNT(*)::int AS count, COALESCE(SUM(citations),0)::int AS total_citations FROM papers WHERE year IS NOT NULL GROUP BY year ORDER BY year ASC");
+    const r = await pool.query("SELECT year, COUNT(*)::int AS count, COALESCE(SUM(citations),0)::int AS total_citations FROM papers WHERE user_id=$1 AND year IS NOT NULL GROUP BY year ORDER BY year ASC", [req.user.id]);
     const data = r.rows;
     const totalPapers = data.reduce((s, d) => s + d.count, 0);
     const yearRange = data.length ? `${data[0].year}-${data[data.length-1].year}` : 'n/a';
     res.json({ ok: true, type: 'publications-per-year', range: yearRange, totalPapers, data });
-  } catch (e) {
-    res.json({ ok: true, type: 'publications-per-year', range: 'demo', totalPapers: 16, data: [
-      { year: 2012, count: 1, total_citations: 120000 },
-      { year: 2014, count: 1, total_citations: 60000 },
-      { year: 2015, count: 1, total_citations: 170000 },
-      { year: 2017, count: 1, total_citations: 95000 },
-      { year: 2018, count: 1, total_citations: 75000 },
-      { year: 2020, count: 3, total_citations: 45000 },
-      { year: 2021, count: 2, total_citations: 28000 },
-      { year: 2022, count: 5, total_citations: 22500 },
-      { year: 2023, count: 1, total_citations: 5000 },
-    ], note: e.message });
+  } catch (_error) {
+    res.status(500).json({ ok: false, error: 'Could not load publication trends' });
   }
 });
 
 // 2) VIZ: citation co-occurrence heatmap (topic x topic from tags)
 router.get('/citation-cooccurrence', async (req, res) => {
   try {
-    const r = await pool.query("SELECT tags, citations FROM papers WHERE tags IS NOT NULL AND tags <> ''");
+    const r = await pool.query("SELECT tags, citations FROM papers WHERE user_id=$1 AND tags IS NOT NULL AND tags <> ''", [req.user.id]);
     const topicSet = {};
     r.rows.forEach(row => {
       (row.tags || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean).forEach(t => { topicSet[t] = (topicSet[t] || 0) + 1; });
@@ -67,10 +52,8 @@ router.get('/citation-cooccurrence', async (req, res) => {
     });
     const rounded = matrix.map(row => row.map(v => Math.round(v * 10) / 10));
     res.json({ ok: true, type: 'cooccurrence', topics: topTopics, matrix: rounded, sampleSize: r.rows.length });
-  } catch (e) {
-    const topics = ['transformer', 'attention', 'nlp', 'llm', 'cnn', 'gan', 'diffusion', 'rag'];
-    const matrix = topics.map((_, i) => topics.map((_, j) => Math.round(((i === j ? 10 : (Math.abs(i - j) <= 2 ? 4 : 1)) + Math.random()) * 10) / 10));
-    res.json({ ok: true, type: 'cooccurrence', topics, matrix, sampleSize: 16, note: e.message });
+  } catch (_error) {
+    res.status(500).json({ ok: false, error: 'Could not load citation co-occurrence data' });
   }
 });
 
@@ -78,21 +61,18 @@ router.get('/citation-cooccurrence', async (req, res) => {
 router.get('/literature-review-pdf', async (req, res) => {
   let papers = [];
   try {
-    const r = await pool.query("SELECT title, authors, year, citations, source, abstract FROM papers ORDER BY citations DESC NULLS LAST LIMIT 10");
+    const r = await pool.query("SELECT title, authors, year, citations, source, abstract FROM papers WHERE user_id=$1 ORDER BY citations DESC NULLS LAST,id LIMIT 10", [req.user.id]);
     papers = r.rows;
-  } catch (e) {
-    papers = [
-      { title: 'Attention Is All You Need', authors: 'Vaswani et al.', year: 2017, citations: 95000, source: 'arXiv', abstract: 'Transformer architecture.' },
-      { title: 'BERT', authors: 'Devlin et al.', year: 2018, citations: 75000, source: 'arXiv', abstract: 'Bidirectional encoders.' },
-    ];
+  } catch (_error) {
+    return res.status(500).json({ error: 'Could not load papers for the PDF draft' });
   }
 
   // Minimal PDF construction (PDF 1.4) — single page summary
   const lines = [];
-  lines.push('AI Research Literature Review');
+  lines.push('AI Research Literature Planning Draft');
   lines.push('Generated: ' + new Date().toISOString().substring(0, 10));
   lines.push('');
-  lines.push('Top Papers by Citation Count:');
+  lines.push('Saved account records by citation count:');
   papers.forEach((p, i) => {
     const t = (p.title || '').substring(0, 70);
     const a = (p.authors || '').substring(0, 50);
@@ -100,7 +80,8 @@ router.get('/literature-review-pdf', async (req, res) => {
     lines.push(`   ${a}`);
   });
   lines.push('');
-  lines.push(`Total papers reviewed: ${papers.length}`);
+  lines.push(`Total saved records listed: ${papers.length}`);
+  lines.push('Verify real sources; synthetic training records are not published evidence.');
 
   const escape = s => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
   let text = 'BT /F1 11 Tf 50 780 Td 14 TL\n';
@@ -134,28 +115,37 @@ router.get('/literature-review-pdf', async (req, res) => {
 });
 
 // 4) NON-VIZ: paper filter rules CRUD
-router.get('/filter-rules', (req, res) => {
-  res.json({ ok: true, count: filterRules.length, rules: filterRules });
+router.get('/filter-rules', async (req, res) => {
+  try {
+    const result=await pool.query('SELECT id,type,field,pattern,note,created_at FROM paper_filter_rules WHERE user_id=$1 ORDER BY created_at DESC,id DESC',[req.user.id]);
+    res.json({ok:true,count:result.rows.length,rules:result.rows});
+  } catch (_error) { res.status(500).json({ok:false,error:'Could not load filter rules'}); }
 });
-router.post('/filter-rules', (req, res) => {
-  const { type, field, pattern, note } = req.body || {};
-  const t = (type === 'exclusion') ? 'exclusion' : 'inclusion';
-  const rule = { id: nextRuleId++, type: t, field: field || 'tags', pattern: pattern || '', note: note || '' };
-  filterRules.push(rule);
-  res.json({ ok: true, rule });
+router.post('/filter-rules', async (req, res) => {
+  try {
+    const type=req.body?.type==='exclusion'?'exclusion':'inclusion';
+    const field=String(req.body?.field||'').trim(),pattern=String(req.body?.pattern||'').trim(),note=String(req.body?.note||'').trim();
+    if(!field||!pattern)return res.status(400).json({ok:false,error:'field and pattern are required'});
+    const result=await pool.query('INSERT INTO paper_filter_rules(user_id,type,field,pattern,note) VALUES($1,$2,$3,$4,$5) RETURNING id,type,field,pattern,note,created_at',[req.user.id,type,field,pattern,note]);
+    res.status(201).json({ok:true,rule:result.rows[0]});
+  } catch (_error) { res.status(500).json({ok:false,error:'Could not create filter rule'}); }
 });
-router.put('/filter-rules/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const idx = filterRules.findIndex(r => r.id === id);
-  if (idx < 0) return res.status(404).json({ ok: false, error: 'not_found' });
-  filterRules[idx] = { ...filterRules[idx], ...req.body, id };
-  res.json({ ok: true, rule: filterRules[idx] });
+router.put('/filter-rules/:id', async (req, res) => {
+  try {
+    const type=req.body?.type==='exclusion'?'exclusion':'inclusion';
+    const field=String(req.body?.field||'').trim(),pattern=String(req.body?.pattern||'').trim(),note=String(req.body?.note||'').trim();
+    if(!field||!pattern)return res.status(400).json({ok:false,error:'field and pattern are required'});
+    const result=await pool.query('UPDATE paper_filter_rules SET type=$1,field=$2,pattern=$3,note=$4 WHERE id=$5 AND user_id=$6 RETURNING id,type,field,pattern,note,created_at',[type,field,pattern,note,req.params.id,req.user.id]);
+    if(!result.rows[0])return res.status(404).json({ok:false,error:'not_found'});
+    res.json({ok:true,rule:result.rows[0]});
+  } catch (_error) { res.status(500).json({ok:false,error:'Could not update filter rule'}); }
 });
-router.delete('/filter-rules/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const before = filterRules.length;
-  filterRules = filterRules.filter(r => r.id !== id);
-  res.json({ ok: true, deleted: before - filterRules.length });
+router.delete('/filter-rules/:id', async (req, res) => {
+  try {
+    const result=await pool.query('DELETE FROM paper_filter_rules WHERE id=$1 AND user_id=$2 RETURNING id',[req.params.id,req.user.id]);
+    if(!result.rows[0])return res.status(404).json({ok:false,error:'not_found'});
+    res.json({ok:true,deleted:1});
+  } catch (_error) { res.status(500).json({ok:false,error:'Could not delete filter rule'}); }
 });
 
 module.exports = router;

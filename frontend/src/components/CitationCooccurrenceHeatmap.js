@@ -6,17 +6,19 @@ export default function CitationCooccurrenceHeatmap() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  useEffect(() => {
-    fetch('http://localhost:3022/api/custom-views/citation-cooccurrence', {
+  const load = () => {
+    setLoading(true);setErr('');
+    fetch('/api/custom-views/citation-cooccurrence', {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
     })
-      .then(r => r.json())
-      .then(j => { setTopics(j.topics || []); setMatrix(j.matrix || []); setLoading(false); })
-      .catch(e => { setErr(String(e)); setLoading(false); });
-  }, []);
+      .then(async r => {const j=await r.json();if(!r.ok)throw Error(j.error||`Request failed with HTTP ${r.status}`);return j;})
+      .then(j => {if(!Array.isArray(j.topics)||!Array.isArray(j.matrix))throw Error('Citation data returned an invalid response.');setTopics(j.topics); setMatrix(j.matrix); setLoading(false); })
+      .catch(e => { setErr(String(e.message||e)); setLoading(false); });
+  };
+  useEffect(load, []);
 
   if (loading) return <div style={{ color: '#888' }}>Loading heatmap…</div>;
-  if (err) return <div style={{ color: '#e94560' }}>{err}</div>;
+  if (err) return <div role="alert" style={{ color: '#e94560' }}>{err} <button type="button" onClick={load}>Retry heatmap</button></div>;
   const maxV = Math.max(1, ...matrix.flat());
   const color = v => {
     const t = v / maxV;
@@ -28,6 +30,7 @@ export default function CitationCooccurrenceHeatmap() {
     <div style={{ background: '#16213e', padding: 20, borderRadius: 8, marginBottom: 20 }}>
       <h3 style={{ color: '#e94560', marginTop: 0 }}>Citation Co-occurrence (Topic × Topic)</h3>
       <div style={{ color: '#888', fontSize: 12, marginBottom: 12 }}>Weighted by log10(citations); top {topics.length} topics</div>
+      {!topics.length&&<p style={{color:'#aab5c8'}}>No tagged saved papers are available for this account.</p>}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>

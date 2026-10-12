@@ -1,19 +1,13 @@
-const axios=require('axios');
-const{parseAIJson}=require('./searchAgent');
 const pool=require('../models/db');
-async function callAI(prompt){
-const r=await axios.post('https://openrouter.ai/api/v1/chat/completions',
-{model:'anthropic/claude-3-5-sonnet-20241022',messages:[{role:'user',content:prompt}],temperature:0.3},
-{headers:{'Authorization':`Bearer ${process.env.OPENROUTER_API_KEY}`,'Content-Type':'application/json'}});
-return parseAIJson(r.data.choices[0].message.content);
-}
+const { actorId }=require('./paperScope');
+const { generate }=require('./openRouter');
 class ReviewGeneratorAgent{
 constructor(){this.name='reviewGeneratorAgent';}
-async execute(topic,papersSummary,scope,userId){
+async execute(topic,papersSummary,scope,userId,options={}){
 let summary=papersSummary;
-if(!summary){const res=await pool.query('SELECT title,authors,abstract,year FROM papers WHERE title ILIKE $1 OR tags ILIKE $1 ORDER BY relevance_score DESC NULLS LAST LIMIT 10',[`%${topic}%`]);summary=res.rows.map(p=>`${p.title} (${p.year}) by ${p.authors}`).join('\n');}
-const prompt=`Generate a literature review outline on "${topic}". Papers summary:\n${summary}\nScope: ${scope||'comprehensive'}. Return JSON with: title, abstract, sections (array with title, key_points, papers_referenced), methodology, key_themes (array), critical_analysis, conclusion, word_count_estimate.`;
-return callAI(prompt);
+if(!summary){const res=await pool.query('SELECT id,title,authors,abstract,year,source FROM papers WHERE user_id=$2 AND (title ILIKE $1 OR tags ILIKE $1) ORDER BY relevance_score DESC NULLS LAST,id LIMIT 10',[`%${topic}%`,actorId(userId)]);summary=res.rows.map(p=>`[Saved record ${p.id}; ${p.source||'source unspecified'}] ${p.title} (${p.year||'year unavailable'}) by ${p.authors||'authors unavailable'}: ${p.abstract||'No abstract saved.'}`).join('\n');}
+const prompt=`Generate a literature review draft on "${topic}".\n\nSource summaries:\n${summary}\n\nScope: ${scope||'comprehensive'}. Do not invent publications, findings, citations, approvals, or evidence. Label synthetic or incomplete source material and expose uncertainty. Return JSON with: title, abstract, sections, methodology, key_themes, critical_analysis, conclusion, limitations, source_record_ids, word_count_estimate.`;
+return (await generate({system:'You create evidence-aware literature review drafts for human review, never final clinical or production decisions.',prompt,signal:options.signal})).report;
 }
 }
 module.exports=new ReviewGeneratorAgent();

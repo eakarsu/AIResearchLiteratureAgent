@@ -105,6 +105,8 @@ function buildGraphFromPapers(papers) {
 }
 
 router.use(auth);
+router.use(require('../middleware/researchActor'));
+const { selectedPaper } = require('../agents/paperScope');
 
 // POST /api/ai/citation-graph
 // Body: { paper_id?, papers?: [{id,title,citing_ids,cited_ids}] }
@@ -116,15 +118,9 @@ router.post('/', async (req, res) => {
     let workingPapers = Array.isArray(papers) ? papers.slice() : [];
     let seed = null;
 
-    if (paper_id && !workingPapers.length) {
+    if (paper_id !== undefined && paper_id !== null) seed = await selectedPaper(req.user.id, paper_id, 'id,title,authors,doi,year');
+    if (seed && !workingPapers.length) {
       // Hydrate from local corpus + citationTracker (Crossref) so we have something to graph.
-      try {
-        const r = await pool.query(
-          'SELECT id,title,authors,doi,year FROM papers WHERE id=$1',
-          [paper_id]
-        );
-        if (r.rows.length) seed = r.rows[0];
-      } catch {}
       let trackerOut = null;
       if (seed) {
         try {
@@ -132,12 +128,10 @@ router.post('/', async (req, res) => {
         } catch {}
       }
       // Pull a candidate corpus to act as graph nodes.
-      let corpus = { rows: [] };
-      try {
-        corpus = await pool.query(
-          'SELECT id,title,authors,doi,year FROM papers ORDER BY relevance_score DESC NULLS LAST LIMIT 40'
-        );
-      } catch {}
+      const corpus = await pool.query(
+        'SELECT id,title,authors,doi,year FROM papers WHERE user_id=$1 ORDER BY relevance_score DESC NULLS LAST,id LIMIT 40',
+        [req.user.id]
+      );
       workingPapers = (seed ? [seed] : []).concat(
         corpus.rows.filter(r => !seed || r.id !== seed.id)
       ).map(p => ({
@@ -185,6 +179,7 @@ Return strict JSON with this exact shape:
     let parsed = null;
     if (llm.success) parsed = parseJsonLoose(llm.content);
 
+    const usedAI = Boolean(llm.success && parsed);
     // Fallback: if LLM unavailable or unparsable, return the deterministic
     // baseline graph with empty enrichment fields so the endpoint is still useful.
     if (!parsed) {
@@ -212,10 +207,10 @@ Return strict JSON with this exact shape:
       );
     } catch {}
 
-    res.json({ feature: 'citation-graph', model: MODEL, result: parsed });
+    res.json({ feature: 'citation-graph', model: usedAI ? MODEL : null, result: parsed, used_ai: usedAI, analysis_source: usedAI ? 'provider-response' : 'local-degree-baseline', ...(usedAI ? {} : { provider_error: llm.error || 'AI response could not be parsed; showing the local graph calculation.' }) });
   } catch (err) {
     console.error('[citation-graph]', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -228,7 +223,7 @@ router.get('/history', async (req, res) => {
     );
     res.json({ items: r.rows });
   } catch (err) {
-    res.json({ items: [], error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

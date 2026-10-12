@@ -6,23 +6,26 @@ export default function PublicationsPerYearChart() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  useEffect(() => {
-    fetch('http://localhost:3022/api/custom-views/publications-per-year', {
+  const load = () => {
+    setLoading(true); setErr('');
+    fetch('/api/custom-views/publications-per-year', {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
     })
-      .then(r => r.json())
-      .then(j => { setData(j.data || []); setMeta({ range: j.range, totalPapers: j.totalPapers }); setLoading(false); })
-      .catch(e => { setErr(String(e)); setLoading(false); });
-  }, []);
+      .then(async r => { const j=await r.json(); if(!r.ok)throw Error(j.error||`Request failed with HTTP ${r.status}`); return j; })
+      .then(j => { if(!Array.isArray(j.data))throw Error('Publication trends returned an invalid response.');setData(j.data); setMeta({ range: j.range, totalPapers: j.totalPapers }); setLoading(false); })
+      .catch(e => { setErr(String(e.message||e)); setLoading(false); });
+  };
+  useEffect(load, []);
 
   if (loading) return <div style={{ color: '#888' }}>Loading publications-per-year…</div>;
-  if (err) return <div style={{ color: '#e94560' }}>{err}</div>;
+  if (err) return <div role="alert" style={{ color: '#e94560' }}>{err} <button type="button" onClick={load}>Retry trends</button></div>;
   const maxC = Math.max(1, ...data.map(d => d.count));
 
   return (
     <div style={{ background: '#16213e', padding: 20, borderRadius: 8, marginBottom: 20 }}>
       <h3 style={{ color: '#e94560', marginTop: 0 }}>Publications Per Year</h3>
       <div style={{ color: '#888', fontSize: 12, marginBottom: 12 }}>Range: {meta.range} · Total: {meta.totalPapers} papers</div>
+      {!data.length&&<p style={{color:'#aab5c8'}}>No dated saved papers are available for this account.</p>}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 200, padding: '10px 0' }}>
         {data.map(d => (
           <div key={d.year} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

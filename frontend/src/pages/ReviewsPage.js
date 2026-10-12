@@ -1,27 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { getReviews, createReview, deleteReview } from '../services/api';
-import Modal from '../components/Modal'; import DetailPanel from '../components/DetailPanel';
-export default function ReviewsPage() {
-  const [items, setItems] = useState([]); const [selected, setSelected] = useState(null); const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ title: '', topic: '', content: '' });
-  const load = () => getReviews().then(setItems).catch(()=>{});
-  useEffect(() => { load(); }, []);
-  const statusColor = { draft: '#888', in_progress: '#f39c12', published: '#2ecc71' };
-  return (<div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h1 style={{ color: '#fff', margin: 0 }}>Literature Reviews</h1>
-      <button onClick={() => { setForm({ title: '', topic: '', content: '' }); setShowModal(true); }} style={{ padding: '10px 20px', background: '#e94560', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>+ New Review</button></div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 16 }}>
-      {items.map(r => (<div key={r.id} onClick={() => setSelected(r)} style={{ background: '#16213e', padding: 20, borderRadius: 12, cursor: 'pointer', borderLeft: `4px solid ${statusColor[r.status]||'#888'}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span style={{ background: (statusColor[r.status]||'#888')+'20', color: statusColor[r.status], padding: '3px 10px', borderRadius: 12, fontSize: 11 }}>{r.status}</span><span style={{ color: '#888', fontSize: 12 }}>{new Date(r.created_at).toLocaleDateString()}</span></div>
-        <h3 style={{ color: '#fff', margin: '0 0 8px', fontSize: 16 }}>{r.title}</h3>
-        <p style={{ color: '#888', fontSize: 13, margin: '0 0 8px' }}>{r.topic}</p>
-        <span style={{ color: '#3498db', fontSize: 12 }}>{r.papers_included} papers included</span>
-      </div>))}
-    </div>
-    {selected && <DetailPanel item={selected} onClose={() => setSelected(null)} onEdit={() => {}} onDelete={() => { deleteReview(selected.id); setSelected(null); load(); }}
-      fields={[{key:'title',label:'Title'},{key:'topic',label:'Topic'},{key:'status',label:'Status'},{key:'papers_included',label:'Papers'},{key:'content',label:'Content'},{key:'gaps_identified',label:'Gaps'}]} />}
-    {showModal && <Modal title="New Review" onClose={() => setShowModal(false)} onSave={() => { createReview(form).then(load); setShowModal(false); }}>
-      {[{key:'title',label:'Title'},{key:'topic',label:'Topic'}].map(f => (<div key={f.key} style={{marginBottom:14}}><label style={{color:'#ccc',fontSize:13,display:'block',marginBottom:4}}>{f.label}</label><input value={form[f.key]} onChange={e=>setForm({...form,[f.key]:e.target.value})} style={{width:'100%',padding:10,background:'#1a1a2e',border:'1px solid #0f3460',borderRadius:6,color:'#fff',boxSizing:'border-box'}} /></div>))}
-    </Modal>}
-  </div>);
+import React,{useEffect,useState}from'react';
+import{getReviews,createReview,updateReview,deleteReview}from'../services/api';
+import Modal from'../components/Modal';
+import DetailPanel from'../components/DetailPanel';
+
+const emptyForm={title:'',topic:'',content:'',status:'draft',papers_included:0,gaps_identified:''};
+const inputStyle={width:'100%',padding:10,background:'#1a1a2e',border:'1px solid #0f3460',borderRadius:6,color:'#fff',boxSizing:'border-box'};
+export default function ReviewsPage(){
+  const[items,setItems]=useState([]),[selected,setSelected]=useState(null),[showModal,setShowModal]=useState(false),[editing,setEditing]=useState(null),[form,setForm]=useState(emptyForm),[loading,setLoading]=useState(true),[error,setError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
+  const load=async()=>{setLoading(true);setError('');try{const rows=await getReviews();if(!Array.isArray(rows))throw Error('Reviews returned an invalid response.');setItems(rows);}catch(err){setItems([]);setError(err.message||'Could not load literature reviews.');}finally{setLoading(false);}};
+  useEffect(()=>{load();},[]);
+  const openNew=()=>{setEditing(null);setForm({...emptyForm});setActionError('');setShowModal(true);};
+  const openEdit=item=>{setEditing(item);setForm({title:item.title||'',topic:item.topic||'',content:item.content||'',status:item.status||'draft',papers_included:item.papers_included||0,gaps_identified:item.gaps_identified||''});setSelected(null);setActionError('');setShowModal(true);};
+  const closeModal=()=>{setShowModal(false);setEditing(null);setActionError('');};
+  const save=async()=>{if(!form.title.trim()){setActionError('Review title is required.');return;}setBusy(true);setActionError('');try{const payload={...form,papers_included:Number(form.papers_included)};if(editing?.id)await updateReview(editing.id,payload);else await createReview(payload);closeModal();await load();}catch(err){setActionError(err.message||'Could not save the literature review.');}finally{setBusy(false);}};
+  const remove=async()=>{if(!selected)return;setBusy(true);setActionError('');try{await deleteReview(selected.id);setSelected(null);await load();}catch(err){setActionError(err.message||'Could not delete the literature review.');}finally{setBusy(false);}};
+  const statusColor={draft:'#94a3b8',in_progress:'#f39c12',published:'#2ecc71'};
+  return <div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}><div><h1 style={{color:'#fff',margin:0}}>Literature Review Drafts ({items.length})</h1><p style={{color:'#94a3b8',fontSize:13}}>Account-owned planning records; draft status does not represent review, approval, or publication.</p></div><button type="button" onClick={openNew} style={{padding:'10px 20px',background:'#e94560',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>+ New Review Draft</button></div>
+    {loading&&<p role="status" style={{color:'#cbd5e1'}}>Loading literature review drafts…</p>}
+    {error&&<div role="alert" style={{color:'#fecdd3',padding:14,border:'1px solid #e94560',borderRadius:8}}>{error} <button type="button" onClick={load}>Retry reviews</button></div>}
+    {actionError&&!showModal&&<p role="alert" style={{color:'#fecdd3'}}>{actionError}</p>}
+    {!loading&&!error&&!items.length&&<p style={{color:'#aab5c8'}}>No account-owned review drafts are available.</p>}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))',gap:16}}>{items.map(item=><button type="button" key={item.id} onClick={()=>{setSelected(item);setActionError('');}} style={{background:'#16213e',padding:20,borderRadius:12,cursor:'pointer',border:'none',borderLeft:`4px solid ${statusColor[item.status]||'#888'}`,textAlign:'left'}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><span style={{color:statusColor[item.status]||'#aaa',fontSize:11}}>{String(item.status||'draft').replace('_',' ')}</span><span style={{color:'#888',fontSize:12}}>{item.created_at?new Date(item.created_at).toLocaleDateString():'Date unavailable'}</span></div><h3 style={{color:'#fff',margin:'0 0 8px',fontSize:16}}>{item.title}</h3><p style={{color:'#aab5c8',fontSize:13}}>{item.topic}</p><span style={{color:'#3498db',fontSize:12}}>{item.papers_included||0} saved papers referenced</span></button>)}</div>
+    {selected&&<DetailPanel item={selected} onClose={()=>setSelected(null)} onEdit={()=>openEdit(selected)} onDelete={remove} fields={[{key:'title',label:'Title'},{key:'topic',label:'Topic'},{key:'status',label:'Status'},{key:'papers_included',label:'Saved papers referenced'},{key:'content',label:'Draft content'},{key:'gaps_identified',label:'Draft gaps'},{key:'created_at',label:'Created'}]}/>}
+    {showModal&&<Modal title={editing?'Edit Review Draft':'New Review Draft'} onClose={closeModal} onSave={save} busy={busy}>{[['title','Title'],['topic','Topic'],['content','Draft content'],['gaps_identified','Draft gaps']].map(([key,label])=><div key={key} style={{marginBottom:14}}><label htmlFor={`review-${key}`}>{label}</label>{key==='content'||key==='gaps_identified'?<textarea id={`review-${key}`} rows={4} value={form[key]} onChange={event=>setForm({...form,[key]:event.target.value})} style={inputStyle}/>:<input id={`review-${key}`} value={form[key]} onChange={event=>setForm({...form,[key]:event.target.value})} style={inputStyle}/>}</div>)}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}><div><label htmlFor="review-status">Status</label><select id="review-status" value={form.status} onChange={event=>setForm({...form,status:event.target.value})} style={inputStyle}><option value="draft">draft</option><option value="in_progress">in progress</option><option value="published">published</option></select></div><div><label htmlFor="review-papers">Saved papers referenced</label><input id="review-papers" type="number" min="0" value={form.papers_included} onChange={event=>setForm({...form,papers_included:event.target.value})} style={inputStyle}/></div></div>{actionError&&<p role="alert" style={{color:'#fecdd3'}}>{actionError}</p>}</Modal>}
+  </div>;
 }

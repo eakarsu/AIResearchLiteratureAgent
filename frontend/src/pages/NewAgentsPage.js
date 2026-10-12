@@ -1,280 +1,75 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import ResearchExamples, { useOwnedPapers, selectedPaperIds } from '../components/ResearchExamples';
+import FormattedAIReport from '../components/FormattedAIReport';
+import ResearchHistory from '../components/ResearchHistory';
 
-const API = 'http://localhost:3022/api';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
-const callAgent = async (path, body) => {
-  const r = await fetch(`${API}${path}`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error || 'Request failed');
-  return d;
+const tools = {
+  summarizer: { title: 'Paper Summarizer', path: 'paper-summarizer', action: 'Summarize', fields: [['paperId','Saved paper ID'],['paperTitle','Saved paper title'],['paperText','Saved abstract or text','textarea']] },
+  methodology: { title: 'Methodology Comparison', path: 'methodology-comparison', action: 'Compare Methodologies', fields: [['paperIds','Saved paper IDs (comma separated)'],['methodFocus','Focus']] },
+  recommender: { title: 'Paper Recommender', path: 'paper-recommender', action: 'Recommend Papers', fields: [['seed','Query or paper title','textarea'],['topN','How many recommendations','number',1,20]] },
+  graph: { title: 'Citation Graph', path: 'citation-graph', action: 'Build Citation Graph', fields: [['graphSeedId','Saved seed paper ID'],['graphDepth','Depth','number',1,3]] },
+  taxonomy: { title: 'Keyword Taxonomy', path: 'keyword-taxonomy', action: 'Build Taxonomy', fields: [['taxonomyTopic','Topic (optional)'],['taxonomyPaperIds','Saved paper IDs (optional, comma separated)'],['taxonomySeedKeywords','Seed keywords (optional, comma separated)']] },
 };
-
-const s = {
-  input: { width: '100%', padding: 10, background: '#1a1a2e', border: '1px solid #0f3460', borderRadius: 6, color: '#fff', marginTop: 4, boxSizing: 'border-box' },
-  btn: { padding: '12px 30px', background: '#e94560', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', marginTop: 8 },
-  card: { background: '#16213e', padding: 24, borderRadius: 12, marginBottom: 16 },
-  label: { color: '#ccc', fontSize: 13, marginTop: 8, display: 'block' },
-};
-
-function renderVal(obj, depth = 0) {
-  if (!obj) return null;
-  if (typeof obj === 'string') return <p style={{ color: '#e0e0e0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{obj}</p>;
-  if (typeof obj === 'number') return <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>{obj}</span>;
-  if (typeof obj === 'boolean') return <span style={{ color: obj ? '#2ecc71' : '#e94560' }}>{obj ? 'Yes' : 'No'}</span>;
-  if (Array.isArray(obj)) return (
-    <div style={{ marginLeft: depth * 10 }}>
-      {obj.map((item, i) => (
-        <div key={i} style={{ background: '#1a1a2e', padding: 10, borderRadius: 6, marginBottom: 6, borderLeft: '3px solid #e94560' }}>
-          {typeof item === 'object' ? renderVal(item, depth + 1) : <span style={{ color: '#e0e0e0' }}>{String(item)}</span>}
-        </div>
-      ))}
-    </div>
-  );
-  return (
-    <div style={{ marginLeft: depth * 10 }}>
-      {Object.entries(obj).map(([k, v]) => (
-        <div key={k} style={{ marginBottom: 10 }}>
-          <div style={{ color: '#e94560', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 3 }}>{k.replace(/_/g, ' ')}</div>
-          {typeof v === 'object' && v !== null ? renderVal(v, depth + 1) : <div style={{ color: '#e0e0e0', background: '#1a1a2e', padding: '6px 10px', borderRadius: 4 }}>{String(v)}</div>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
+const initial = {paperId:'',paperTitle:'',paperText:'',paperIds:'',methodFocus:'',seed:'',topN:5,graphSeedId:'',graphDepth:2,taxonomyTopic:'',taxonomyPaperIds:'',taxonomySeedKeywords:''};
+const style = {width:'100%',padding:10,background:'#1a1a2e',border:'1px solid #0f3460',borderRadius:6,color:'#fff',margin:'4px 0 12px',boxSizing:'border-box'};
 export default function NewAgentsPage() {
-  const [tab, setTab] = useState('summarizer');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-
-  // Summarizer inputs
-  const [paperText, setPaperText] = useState('');
-  const [paperTitle, setPaperTitle] = useState('');
-
-  // Methodology comparison inputs
-  const [paperIds, setPaperIds] = useState('');
-  const [methodFocus, setMethodFocus] = useState('experimental design and evaluation');
-
-  // Recommender inputs
-  const [seed, setSeed] = useState('');
-  const [topN, setTopN] = useState(5);
-
-  // Citation graph inputs
-  const [graphSeedId, setGraphSeedId] = useState('');
-  const [graphSeedDoi, setGraphSeedDoi] = useState('');
-  const [graphDepth, setGraphDepth] = useState(2);
-
-  // Keyword taxonomy inputs
-  const [taxonomyTopic, setTaxonomyTopic] = useState('');
-  const [taxonomyPaperIds, setTaxonomyPaperIds] = useState('');
-  const [taxonomySeedKeywords, setTaxonomySeedKeywords] = useState('');
-
-  const run = async (fn) => {
-    setLoading(true); setError(''); setResult(null);
-    try {
-      const data = await fn();
-      setResult(data);
-    } catch (e) {
-      const msg = e.message || 'Agent error';
-      if (/503/.test(msg) || /OPENROUTER_API_KEY/i.test(msg)) {
-        setError('AI service unavailable — OPENROUTER_API_KEY is not configured on the backend.');
-      } else {
-        setError(msg);
+  const [tab,setTab]=useState('summarizer'), [values,setValues]=useState(initial), [loading,setLoading]=useState(false), [error,setError]=useState(''), [result,setResult]=useState(null), [notice,setNotice]=useState(''), [lastRequest,setLastRequest]=useState(null);
+  const sources=useOwnedPapers(), pending=useRef(false), controller=useRef(null), tool=tools[tab];
+  const hasSession=Boolean(localStorage.getItem('token'));
+  const referenceGate=((tab==='summarizer'||tab==='graph') && (sources.loading || sources.error || !sources.papers.length)) || (tab==='methodology' && (sources.loading || sources.error || sources.papers.length<2));
+  const fill=(sample,index)=>{
+    const paper=sources.papers[index%sources.papers.length];
+    const preserveIds=(text,minimum=1)=>{try{const ids=selectedPaperIds(text,sources.papers);if(ids.length>=minimum)return ids.join(',');}catch{}return sources.papers.slice(index).concat(sources.papers.slice(0,index)).slice(0,Math.max(minimum,2)).map(row=>row.id).join(',');};
+    setValues(current=>{
+      if(tab==='summarizer')return {...current,paperId:paper?String(paper.id):'',paperTitle:paper?.title || 'Fictional practice: '+sample.topic,paperText:paper?.abstract || sample.text};
+      if(tab==='methodology')return {...current,paperIds:preserveIds(current.paperIds,2),methodFocus:sample.scope};
+      if(tab==='recommender')return {...current,seed:sample.topic,topN:sample.count};
+      if(tab==='graph'){
+        const selected=sources.papers.find(row=>String(row.id)===current.graphSeedId), genuine=selected || paper;
+        return {...current,graphSeedId:genuine?String(genuine.id):'',graphDepth:sample.depth};
       }
-    } finally {
-      setLoading(false);
-    }
+      return {...current,taxonomyTopic:sample.topic,taxonomyPaperIds:preserveIds(current.taxonomyPaperIds),taxonomySeedKeywords:sample.keywords};
+    });
+    setNotice('All fields filled. Existing valid saved IDs were preserved; practice abstracts remain explicitly fictional. Generate is a separate action.');
   };
-
-  const runSummarizer = () => {
-    if (!paperText.trim()) {
-      setError('Paper text or abstract is required.');
-      return;
-    }
-    return run(() => callAgent('/agents/paper-summarizer', { title: paperTitle, text: paperText }));
+  const runRequest=async(request)=>{
+    if(pending.current)return;
+    const activeTool=tools[request.tab];
+    pending.current=true;setLoading(true);setError('');setResult(null);setLastRequest(request);
+    const currentController=new AbortController();controller.current=currentController;
+    try{
+      const response=await fetch(`/api/agents/${activeTool.path}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('token')}`},body:JSON.stringify(request.body),signal:currentController.signal});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'Agent request failed');setResult(data);
+    }catch(err){if(err.name==='AbortError')setNotice('Request canceled. No completion was saved by this page.');else setError(err.message||'Agent request failed');}
+    finally{if(controller.current===currentController)controller.current=null;pending.current=false;setLoading(false);}
   };
-
-  const runMethodologyComparison = () => {
-    const ids = paperIds.split(',').map(s => s.trim()).filter(Boolean);
-    if (ids.length < 2) {
-      setError('Provide at least 2 paper IDs (comma-separated).');
-      return;
-    }
-    return run(() => callAgent('/agents/methodology-comparison', { paper_ids: ids, focus: methodFocus }));
+  const execute=async event=>{
+    event.preventDefault();if(pending.current)return;setError('');
+    try{
+      if(!hasSession)throw Error('Sign in before running an agent.');
+      if(referenceGate)throw Error('Load the required saved papers before running this agent.');
+      let body;
+      if(tab==='summarizer'){const ids=selectedPaperIds(values.paperId,sources.papers);if(ids.length!==1)throw Error('Select one saved paper.');const paper=sources.papers.find(row=>row.id===ids[0]);if(!paper||values.paperTitle!==paper.title||values.paperText!==(paper.abstract||''))throw Error('The title or text changed. Reload a saved-paper example before summarizing.');body={paper_id:ids[0]};}
+      if(tab==='methodology'){const ids=selectedPaperIds(values.paperIds,sources.papers);if(ids.length<2)throw Error('Select at least two saved papers.');body={paper_ids:ids,topic:values.methodFocus};}
+      if(tab==='recommender'){const count=Number(values.topN);if(!values.seed.trim()||!Number.isInteger(count)||count<1||count>20)throw Error('Enter a query and a recommendation count from 1 to 20.');body={query:values.seed,limit:count};}
+      if(tab==='graph'){
+        const ids=selectedPaperIds(values.graphSeedId,sources.papers), depth=Number(values.graphDepth);
+        if(!ids.length)throw Error('Select a saved seed paper.');
+        if(!Number.isInteger(depth)||depth<1||depth>3)throw Error('Depth must be from 1 to 3.');
+        body={seed_paper_id:ids[0],depth};
+      }
+      if(tab==='taxonomy'){const ids=selectedPaperIds(values.taxonomyPaperIds,sources.papers),keywords=values.taxonomySeedKeywords.split(',').map(v=>v.trim()).filter(Boolean);if(!values.taxonomyTopic.trim()&&!ids.length&&!keywords.length)throw Error('Enter a topic, saved papers or keywords.');body={topic:values.taxonomyTopic||undefined,paper_ids:ids.length?ids:undefined,seed_keywords:keywords.length?keywords:undefined};}
+      await runRequest({tab,body});
+    }catch(err){setError(err.message||'Agent request failed');}
   };
-
-  const runRecommender = () => {
-    if (!seed.trim()) {
-      setError('Seed query or paper title required.');
-      return;
-    }
-    return run(() => callAgent('/agents/paper-recommender', { seed, top_n: Number(topN) }));
-  };
-
-  const runCitationGraph = () => {
-    if (!graphSeedId.trim() && !graphSeedDoi.trim()) {
-      setError('Provide a seed paper ID or DOI.');
-      return;
-    }
-    return run(() => callAgent('/agents/citation-graph', {
-      seed_paper_id: graphSeedId ? Number(graphSeedId) : undefined,
-      seed_doi: graphSeedDoi || undefined,
-      depth: Number(graphDepth) || 2,
-    }));
-  };
-
-  const runKeywordTaxonomy = () => {
-    const ids = taxonomyPaperIds.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(n => !isNaN(n));
-    const seedKeywords = taxonomySeedKeywords.split(',').map(s => s.trim()).filter(Boolean);
-    if (!taxonomyTopic.trim() && ids.length === 0 && seedKeywords.length === 0) {
-      setError('Provide a topic, paper IDs, or seed keywords.');
-      return;
-    }
-    return run(() => callAgent('/agents/keyword-taxonomy', {
-      topic: taxonomyTopic || undefined,
-      paper_ids: ids.length ? ids : undefined,
-      seed_keywords: seedKeywords.length ? seedKeywords : undefined,
-    }));
-  };
-
-  const tabs = [
-    { key: 'summarizer', label: '📄 Paper Summarizer' },
-    { key: 'methodology', label: '🔬 Methodology Comparison' },
-    { key: 'recommender', label: '✨ Paper Recommender' },
-    { key: 'graph', label: '🕸️ Citation Graph' },
-    { key: 'taxonomy', label: '🔤 Keyword Taxonomy' },
-  ];
-
-  return (
-    <div>
-      <h1 style={{ color: '#fff', marginBottom: 16 }}>New AI Research Agents</h1>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            onClick={() => { setTab(t.key); setResult(null); setError(''); }}
-            style={{
-              padding: '8px 16px',
-              background: tab === t.key ? '#e94560' : '#16213e',
-              color: tab === t.key ? '#fff' : '#ccc',
-              border: '1px solid #0f3460',
-              borderRadius: 6,
-              cursor: 'pointer'
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={s.card}>
-        {tab === 'summarizer' && (
-          <>
-            <h3 style={{ color: '#e94560', marginTop: 0 }}>Paper Summarizer</h3>
-            <p style={{ color: '#888', marginBottom: 12, fontSize: 13 }}>
-              Structured summary with key findings, methods, limitations, and glossary.
-            </p>
-            <label style={s.label}>Paper title (optional)</label>
-            <input value={paperTitle} onChange={e => setPaperTitle(e.target.value)} style={s.input} />
-            <label style={s.label}>Paper text or abstract</label>
-            <textarea value={paperText} onChange={e => setPaperText(e.target.value)} rows={8} style={s.input} />
-            <button onClick={runSummarizer} disabled={loading} style={s.btn}>
-              {loading ? '⏳ Summarizing...' : '📄 Summarize'}
-            </button>
-          </>
-        )}
-
-        {tab === 'methodology' && (
-          <>
-            <h3 style={{ color: '#e94560', marginTop: 0 }}>Methodology Comparison</h3>
-            <p style={{ color: '#888', marginBottom: 12, fontSize: 13 }}>
-              Compare research methodologies across selected papers.
-            </p>
-            <label style={s.label}>Paper IDs (comma separated)</label>
-            <input value={paperIds} onChange={e => setPaperIds(e.target.value)} placeholder="e.g. 1,3,7" style={s.input} />
-            <label style={s.label}>Focus</label>
-            <input value={methodFocus} onChange={e => setMethodFocus(e.target.value)} style={s.input} />
-            <button onClick={runMethodologyComparison} disabled={loading} style={s.btn}>
-              {loading ? '⏳ Comparing...' : '🔬 Compare Methodologies'}
-            </button>
-          </>
-        )}
-
-        {tab === 'recommender' && (
-          <>
-            <h3 style={{ color: '#e94560', marginTop: 0 }}>Paper Recommender</h3>
-            <p style={{ color: '#888', marginBottom: 12, fontSize: 13 }}>
-              Recommend top-N related papers from your corpus given a seed query or title.
-            </p>
-            <label style={s.label}>Seed (query or paper title)</label>
-            <textarea value={seed} onChange={e => setSeed(e.target.value)} rows={3} style={s.input} />
-            <label style={s.label}>How many recommendations</label>
-            <input
-              type="number" min="1" max="20"
-              value={topN}
-              onChange={e => setTopN(e.target.value)}
-              style={s.input}
-            />
-            <button onClick={runRecommender} disabled={loading} style={s.btn}>
-              {loading ? '⏳ Recommending...' : '✨ Recommend Papers'}
-            </button>
-          </>
-        )}
-
-        {tab === 'graph' && (
-          <>
-            <h3 style={{ color: '#e94560', marginTop: 0 }}>Citation Graph</h3>
-            <p style={{ color: '#888', marginBottom: 12, fontSize: 13 }}>
-              Build a citation network (forward + backward) around a seed paper. Returns nodes,
-              edges, clusters, central papers, and emerging subfields — ready to visualize.
-            </p>
-            <label style={s.label}>Seed paper ID (optional if DOI given)</label>
-            <input value={graphSeedId} onChange={e => setGraphSeedId(e.target.value)} style={s.input} />
-            <label style={s.label}>Seed DOI (optional if paper ID given)</label>
-            <input value={graphSeedDoi} onChange={e => setGraphSeedDoi(e.target.value)} style={s.input} />
-            <label style={s.label}>Depth (1–3)</label>
-            <input
-              type="number" min="1" max="3"
-              value={graphDepth}
-              onChange={e => setGraphDepth(e.target.value)}
-              style={s.input}
-            />
-            <button onClick={runCitationGraph} disabled={loading} style={s.btn}>
-              {loading ? '⏳ Building graph...' : '🕸️ Build Citation Graph'}
-            </button>
-          </>
-        )}
-
-        {tab === 'taxonomy' && (
-          <>
-            <h3 style={{ color: '#e94560', marginTop: 0 }}>Keyword Taxonomy & Hypothesis Generator</h3>
-            <p style={{ color: '#888', marginBottom: 12, fontSize: 13 }}>
-              Build a structured keyword taxonomy and propose testable hypotheses for a topic.
-            </p>
-            <label style={s.label}>Topic (optional)</label>
-            <input value={taxonomyTopic} onChange={e => setTaxonomyTopic(e.target.value)} style={s.input} />
-            <label style={s.label}>Paper IDs (comma separated, optional)</label>
-            <input value={taxonomyPaperIds} onChange={e => setTaxonomyPaperIds(e.target.value)} placeholder="e.g. 1,3,7" style={s.input} />
-            <label style={s.label}>Seed keywords (comma separated, optional)</label>
-            <input value={taxonomySeedKeywords} onChange={e => setTaxonomySeedKeywords(e.target.value)} placeholder="e.g. RAG, vector store, retrieval" style={s.input} />
-            <button onClick={runKeywordTaxonomy} disabled={loading} style={s.btn}>
-              {loading ? '⏳ Building taxonomy...' : '🔤 Build Taxonomy'}
-            </button>
-          </>
-        )}
-
-        {error && (
-          <div style={{ color: '#fff', background: '#e94560', padding: 10, borderRadius: 6, marginTop: 12 }}>{error}</div>
-        )}
-      </div>
-
-      {result && (
-        <div style={s.card}>
-          <h3 style={{ color: '#e94560', marginTop: 0 }}>Results</h3>
-          {renderVal(result)}
-        </div>
-      )}
-    </div>
-  );
+  const cancel=()=>controller.current?.abort();
+  return <div><h1>Research Agents</h1><nav className="research-tool-nav">{Object.entries(tools).map(([key,item])=><button key={key} type="button" disabled={loading} onClick={()=>{setTab(key);setResult(null);setError('');setNotice('');setLastRequest(null);}}>{item.title}</button>)}</nav>
+    <form className="research-tool-form" onSubmit={execute} style={{background:'#16213e',padding:24,borderRadius:12,marginTop:16}}>
+      <h2>{tool.title}</h2><ResearchExamples onFill={fill} disabled={loading} sources={sources} notice={notice}/>
+      {tab==='graph'&&<p>AI proposes relationships for review. These are inferred connections, not verified citation records.</p>}
+      {tool.fields.map(([key,label,type='text',min,max])=><div key={key}><label htmlFor={`agent-${key}`}>{label}</label>{type==='textarea'?<textarea id={`agent-${key}`} name={key} rows={6} style={style} value={values[key]} onChange={e=>setValues({...values,[key]:e.target.value})}/>:<input id={`agent-${key}`} name={key} type={type} min={min} max={max} style={style} value={values[key]} onChange={e=>setValues({...values,[key]:e.target.value})}/>}</div>)}
+      {!hasSession&&<p role="alert">Sign in before running an agent.</p>}{error&&<p role="alert">{error}{lastRequest?.tab===tab&&<button className="research-retry" type="button" onClick={()=>runRequest(lastRequest)}>Retry</button>}</p>}
+      <div className="research-request-actions"><button className="research-generate" type="submit" disabled={loading||!hasSession||Boolean(referenceGate)}>Generate with OpenRouter</button><button className="research-cancel" type="button" disabled={!loading} onClick={cancel}>Cancel request</button></div>
+    </form>
+    {loading&&<FormattedAIReport loading title={tool.title+' report'}/>} {result!==null&&<FormattedAIReport response={result} title={tool.title+' report'}/>}<ResearchHistory/></div>;
 }

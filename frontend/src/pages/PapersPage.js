@@ -4,13 +4,13 @@ import Modal from'../components/Modal';import DetailPanel from'../components/Det
 const s={btn:(bg='#e94560')=>({padding:'8px 16px',background:bg,color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}),input:{width:'100%',padding:10,background:'#1a1a2e',border:'1px solid #0f3460',borderRadius:6,color:'#fff',marginTop:4,boxSizing:'border-box'}};
 export default function PapersPage(){
 const[items,setItems]=useState([]);const[page,setPage]=useState(1);const[totalPages,setTotalPages]=useState(1);const[total,setTotal]=useState(0);const[search,setSearch]=useState('');const[filterSrc,setFilterSrc]=useState('');const[filterStatus,setFilterStatus]=useState('');
-const[selected,setSelected]=useState(null);const[showModal,setShowModal]=useState(false);const[editing,setEditing]=useState(null);const[notes,setNotes]=useState([]);const[noteText,setNoteText]=useState('');const[showDOI,setShowDOI]=useState(false);const[doi,setDoi]=useState('');const[doiResult,setDoiResult]=useState(null);const[citResult,setCitResult]=useState(null);const[loading,setLoading]=useState(false);
+const[selected,setSelected]=useState(null);const[showModal,setShowModal]=useState(false);const[editing,setEditing]=useState(null);const[notes,setNotes]=useState([]);const[noteText,setNoteText]=useState('');const[noteLoading,setNoteLoading]=useState(false);const[noteError,setNoteError]=useState('');const[showDOI,setShowDOI]=useState(false);const[doi,setDoi]=useState('');const[doiResult,setDoiResult]=useState(null);const[citResult,setCitResult]=useState(null);const[loading,setLoading]=useState(false);const[listLoading,setListLoading]=useState(true);const[listError,setListError]=useState('');
 const[form,setForm]=useState({title:'',authors:'',abstract:'',source:'arXiv',year:2024,doi:'',tags:''});
-const load=(p=1,q=search,src=filterSrc,st=filterStatus)=>getPapers({page:p,limit:20,search:q,source:src,status:st}).then(r=>{setItems(r.data||r);setTotalPages(r.pagination?.totalPages||1);setTotal(r.pagination?.total||0);}).catch(()=>{});
+const load=async(p=1,q=search,src=filterSrc,st=filterStatus)=>{setListLoading(true);setListError('');try{const r=await getPapers({page:p,limit:20,search:q,source:src,status:st});const rows=Array.isArray(r)?r:r.data;if(!Array.isArray(rows))throw Error('Papers returned an invalid response.');setItems(rows);setTotalPages(r.pagination?.totalPages||1);setTotal(r.pagination?.total??rows.length);}catch(error){setListError(error.message||'Could not load papers.');}finally{setListLoading(false);}};
 useEffect(()=>{load(1);},[]);
 const handleSave=async()=>{if(editing)await updatePaper(editing.id,form);else await createPaper(form);setShowModal(false);setEditing(null);load(page);};
 const statusColor={unread:'#e94560',reading:'#f39c12',read:'#2ecc71'};
-const loadNotes=async(paperId)=>{try{const n=await getNotes(paperId);setNotes(n);}catch{}};
+const loadNotes=async(paperId)=>{setNoteLoading(true);setNoteError('');try{const n=await getNotes(paperId);if(!Array.isArray(n))throw Error('Notes returned an invalid response.');setNotes(n);}catch(error){setNotes([]);setNoteError(error.message||'Could not load notes.');}finally{setNoteLoading(false);}};
 const addNote=async()=>{if(!noteText.trim())return;try{await createNote({paper_id:selected.id,content:noteText});setNoteText('');loadNotes(selected.id);}catch(e){alert(e.message);}};
 const doLookup=async()=>{if(!doi.trim())return;setLoading(true);try{const r=await doiLookup({doi});setDoiResult(r.paper);}catch(e){alert(e.message);}setLoading(false);};
 const doImport=async()=>{if(!doiResult)return;try{await importPaper(doiResult);alert('Imported!');load(page);setShowDOI(false);setDoiResult(null);}catch(e){alert(e.message);}};
@@ -30,6 +30,9 @@ return(<div>
 <option value="">All Status</option>{['unread','reading','read'].map(x=><option key={x}>{x}</option>)}</select>
 <button onClick={()=>load(1)} style={s.btn('#0f3460')}>Search</button>
 </div>
+{listLoading&&<p role="status" style={{color:'#cbd5e1',padding:'18px 0'}}>Loading saved papers…</p>}
+{listError&&<div role="alert" style={{color:'#fecdd3',padding:14,border:'1px solid #e94560',borderRadius:8,marginBottom:14}}>{listError} <button type="button" onClick={()=>load(page)} style={s.btn('#0f3460')}>Retry</button></div>}
+{!listLoading&&!listError&&!items.length&&<p style={{color:'#aab5c8',padding:'18px 0'}}>No papers match these filters.</p>}
 <div style={{display:'flex',flexDirection:'column',gap:10}}>
 {items.map(p=>(<div key={p.id} onClick={()=>{setSelected(p);loadNotes(p.id);setCitResult(null);}} style={{background:'#16213e',padding:16,borderRadius:10,cursor:'pointer',borderLeft:`4px solid ${statusColor[p.status]||'#888'}`}}>
 <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
@@ -58,6 +61,8 @@ fields={[{key:'title',label:'Title'},{key:'authors',label:'Authors'},{key:'abstr
 <button onClick={()=>trackCitations(selected)} disabled={loading} style={s.btn('#9b59b6')}>{loading?'...':'📊 Track Citations'}</button>
 </div>
 {citResult&&<div style={{background:'#0f3460',padding:12,borderRadius:6,marginBottom:12,fontSize:12,color:'#e0e0e0'}}><strong>Citations: {citResult.citation_count}</strong> | Refs: {citResult.references_count}<br/>{citResult.error&&<span style={{color:'#e94560'}}>{citResult.error}</span>}</div>}
+{noteLoading&&<p role="status" style={{color:'#cbd5e1'}}>Loading notes…</p>}
+{noteError&&<p role="alert" style={{color:'#fecdd3'}}>{noteError} <button type="button" onClick={()=>loadNotes(selected.id)} style={s.btn('#0f3460')}>Retry notes</button></p>}
 <div style={{display:'flex',gap:6,marginBottom:8}}>
 <input value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Add note..." style={{...s.input,marginTop:0,flex:1}}/>
 <button onClick={addNote} style={s.btn()}>Add</button>

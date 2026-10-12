@@ -1,4 +1,5 @@
 const pool=require('../models/db');
+const { actorId }=require('./paperScope');
 function parseAIJson(content){
 try{return JSON.parse(content);}catch{}
 const md=content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);if(md){try{return JSON.parse(md[1]);}catch{}}
@@ -10,8 +11,8 @@ constructor(){this.name='searchAgent';}
 async execute(query,userId){
 const q=`%${query}%`;
 const res=await pool.query(
-`SELECT * FROM papers WHERE (title ILIKE $1 OR authors ILIKE $1 OR abstract ILIKE $1 OR tags ILIKE $1) ORDER BY relevance_score DESC NULLS LAST LIMIT 20`,
-[q]
+`SELECT * FROM papers WHERE user_id=$2 AND (title ILIKE $1 OR authors ILIKE $1 OR abstract ILIKE $1 OR tags ILIKE $1) ORDER BY relevance_score DESC NULLS LAST,id LIMIT 20`,
+[q,actorId(userId)]
 );
 return{agent:'searchAgent',query,results:res.rows,count:res.rows.length};
 }

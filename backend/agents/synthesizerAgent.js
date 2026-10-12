@@ -1,20 +1,14 @@
-const axios=require('axios');
-const{parseAIJson}=require('./searchAgent');
 const pool=require('../models/db');
-async function callAI(prompt){
-const r=await axios.post('https://openrouter.ai/api/v1/chat/completions',
-{model:'anthropic/claude-3-5-sonnet-20241022',messages:[{role:'user',content:prompt}],temperature:0.3},
-{headers:{'Authorization':`Bearer ${process.env.OPENROUTER_API_KEY}`,'Content-Type':'application/json'}});
-return parseAIJson(r.data.choices[0].message.content);
-}
+const { actorId, selectedPapers }=require('./paperScope');
+const { generate }=require('./openRouter');
 class SynthesizerAgent{
 constructor(){this.name='synthesizerAgent';}
-async execute(topic,paperIds,userId){
+async execute(topic,paperIds,userId,options={}){
 let papers;
-if(paperIds&&paperIds.length>0){const res=await pool.query('SELECT title,authors,abstract,year,source FROM papers WHERE id=ANY($1::int[])',[paperIds]);papers=res.rows;}
-else{const res=await pool.query('SELECT title,authors,abstract,year,source FROM papers ORDER BY relevance_score DESC NULLS LAST LIMIT 10');papers=res.rows;}
-const prompt=`Synthesize findings from these research papers on "${topic}". Papers:\n${JSON.stringify(papers,null,2)}\nReturn JSON with: synthesis, key_findings (array), methodologies_used (array), consensus_points (array), contradictions (array), research_gaps (array), future_directions (array), confidence_level.`;
-return callAI(prompt);
+if(paperIds&&paperIds.length>0){papers=await selectedPapers(userId,paperIds,'id,title,authors,abstract,year,source,doi');}
+else{const res=await pool.query('SELECT id,title,authors,abstract,year,source,doi FROM papers WHERE user_id=$1 ORDER BY relevance_score DESC NULLS LAST,id LIMIT 10',[actorId(userId)]);papers=res.rows;}
+const prompt=`Synthesize the supplied saved research records on "${topic}". Do not invent studies, findings, citations, consent, approvals, or provider actions. Clearly distinguish synthetic training records from published evidence.\n\nSaved records:\n${JSON.stringify(papers,null,2)}\n\nReturn JSON with: synthesis, key_findings, methodologies_used, consensus_points, contradictions, research_gaps, future_directions, confidence_level, source_record_ids, limitations.`;
+return (await generate({system:'You create evidence-aware literature synthesis drafts. Treat every supplied record as unverified source material and identify uncertainty.',prompt,signal:options.signal})).report;
 }
 }
 module.exports=new SynthesizerAgent();
