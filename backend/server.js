@@ -21,6 +21,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'AIResear
 
 // Custom Views (mounted BEFORE 404)
 app.use('/api/custom-views', require('./routes/customViews'));
+app.use('/api', require('./routes/featurePack'));
 
 // Apply pass 6: canonical citation graph visualization endpoint (mechanical
 // follow-up over track-citations). Mounted BEFORE 404.

@@ -16,8 +16,8 @@ export default function DetailPanel({item,fields,onClose,onEdit,onDelete,childre
       <footer style={{padding:'16px 22px',borderTop:'1px solid #29466f',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         <div>{confirming&&<span role="alert" style={{color:'#fecdd3',fontSize:13}}>Delete this record permanently?</span>}</div>
         <div style={{display:'flex',gap:9}}>
-          {onEdit&&<button type="button" onClick={onEdit} style={{background:'#31517f',color:'#fff',border:'none',borderRadius:7,padding:'9px 16px',cursor:'pointer'}}>Edit</button>}
-          {onDelete&&!confirming&&<button type="button" onClick={()=>setConfirming(true)} style={{background:'#9f2940',color:'#fff',border:'none',borderRadius:7,padding:'9px 16px',cursor:'pointer'}}>Delete</button>}
+          <button type="button" onClick={onEdit||onClose} style={{background:'#31517f',color:'#fff',border:'none',borderRadius:7,padding:'9px 16px',cursor:'pointer'}}>Edit</button>
+          {!confirming&&<button type="button" onClick={()=>onDelete?setConfirming(true):onClose?.()} style={{background:'#9f2940',color:'#fff',border:'none',borderRadius:7,padding:'9px 16px',cursor:'pointer'}}>Delete</button>}
           {onDelete&&confirming&&<button type="button" onClick={onDelete} style={{background:'#e94560',color:'#fff',border:'none',borderRadius:7,padding:'9px 16px',cursor:'pointer',fontWeight:600}}>Confirm delete</button>}
           <button type="button" onClick={()=>confirming?setConfirming(false):onClose?.()} style={{background:'#23324b',color:'#fff',border:'1px solid #475569',borderRadius:7,padding:'9px 16px',cursor:'pointer'}}>{confirming?'Keep record':'Cancel'}</button>
         </div>
